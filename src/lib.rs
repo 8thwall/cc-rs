@@ -3902,7 +3902,6 @@ impl Build {
     // variable is not set when running using hermetic bazel.
     fn sysroot_from_cc() -> Option<String> {
         let cc: String = env::var("CC").ok()?;
-        println!("cargo:warning=cc: [lib@apple_sdk_root_inner]: cc: {}", cc);
         let out = Command::new(cc)
             .args(["-v", "-E", "-"])
             .stdin(std::process::Stdio::null())
@@ -3937,7 +3936,6 @@ impl Build {
         // it will use non-hermetic xcode toolchain and fail on CI machines where it is not 
         // installed (and give incorrect paths even if it is installed).
         if let Some(sysroot) = Self::sysroot_from_cc() {
-            println!("cargo:warning=cc: [lib@apple_sdk_root_inner]: Returning early with sysroot from CC: {}", &sysroot);
             return Ok(Arc::from(OsStr::new(&sysroot)));
         }
 
@@ -4031,13 +4029,10 @@ impl Build {
         // NOTE(paris): Use an environment variable here because when running using hermetic bazel 
         // we do not have xcrun available in the xcode toolchain (it's an OSX host library). So we
         // avoid calling it here by setting environment variables instead.
-        println!("cargo:warning=cc: [lib@apple_deployment_target]: sdk: {}", sdk);
         let default_deployment_from_sdk = || -> Option<Arc<str>> {
             if let Some(version) = Self::deployment_target_from_cc() {
-                println!("cargo:warning=cc: [lib@apple_deployment_target]: Using deplolyment target version from CC: {}", version);
-                return Some(Arc::from(version));
+                Some(Arc::from(version))
             } else {
-                println!("cargo:warning=cc: [lib@apple_deployment_target]: no version found");
                 let version = run_output(
                     self.cmd("xcrun")
                         .arg("--show-sdk-version")
