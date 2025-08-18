@@ -3898,7 +3898,7 @@ impl Build {
         Ok(())
     }
 
-    // Gets the sysroot from cc by looking for the -sysroot flag. Used b/c neither SDKROOT nor 
+    // Gets the sysroot from cc by looking for the -sysroot flag. Used b/c neither SDKROOT nor
     // SYSROOT environment variables are set when running using hermetic bazel.
     fn sysroot_from_cc(&self) -> Option<String> {
         let cc = self.getenv_unwrap_str("CC").ok()?;
@@ -3906,7 +3906,8 @@ impl Build {
         let out = Command::new(cc)
             .args(["-v", "-E", "-"])
             .stdin(std::process::Stdio::null())
-            .output().ok()?;
+            .output()
+            .ok()?;
         let s = std::str::from_utf8(&out.stderr).ok()?;
         let mut it = s.split_whitespace();
         while let Some(t) = it.next() {
@@ -3934,7 +3935,7 @@ impl Build {
     fn apple_sdk_root_inner(&self, sdk: &str) -> Result<Arc<OsStr>, Error> {
         // NOTE(paris): Fetch the SDK directly from cc because when running using hermetic bazel, we
         // do not have xcrun available in the xcode toolchain (it's an OSX host library). So running
-        // it will use non-hermetic xcode toolchain and fail on CI machines where it is not 
+        // it will use non-hermetic xcode toolchain and fail on CI machines where it is not
         // installed (and give incorrect paths even if it is installed).
         if let Some(sysroot) = self.sysroot_from_cc() {
             return Ok(Arc::from(OsStr::new(&sysroot)));
@@ -4028,10 +4029,10 @@ impl Build {
         }
 
         let default_deployment_from_sdk = || -> Option<Arc<str>> {
-            // NOTE(paris): Fetch the deployment target directly from cc because when running using 
-            // hermetic bazel, we do not have xcrun available in the xcode toolchain (it's an OSX 
-            // host library). So running it will use non-hermetic xcode toolchain and fail on CI 
-            // machines where it is not installed (and give incorrect paths even if it is 
+            // NOTE(paris): Fetch the deployment target directly from cc because when running using
+            // hermetic bazel, we do not have xcrun available in the xcode toolchain (it's an OSX
+            // host library). So running it will use non-hermetic xcode toolchain and fail on CI
+            // machines where it is not installed (and give incorrect paths even if it is
             // installed).
             if let Some(version) = self.deployment_target_from_cc() {
                 Some(Arc::from(version))
@@ -4042,8 +4043,9 @@ impl Build {
                         .arg("--sdk")
                         .arg(sdk),
                     &self.cargo_output,
-                ).ok()?;
-        
+                )
+                .ok()?;
+
                 Some(Arc::from(std::str::from_utf8(&version).ok()?.trim()))
             }
         };
