@@ -3898,10 +3898,11 @@ impl Build {
         Ok(())
     }
 
-    // Gets the sysroot from cc by looking for the -sysroot flag. Used b/c the SYSROOT environment 
-    // variable is not set when running using hermetic bazel.
+    // Gets the sysroot from cc by looking for the -sysroot flag. Used b/c neither SDKROOT nor 
+    // SYSROOT environment variables are set when running using hermetic bazel.
     fn sysroot_from_cc(&self) -> Option<String> {
         let cc = self.getenv_unwrap_str("CC").ok()?;
+        println!("cargo:warning=cc: [lib@sysroot_from_cc]: cc: {cc}");
         let out = Command::new(cc)
             .args(["-v", "-E", "-"])
             .stdin(std::process::Stdio::null())
