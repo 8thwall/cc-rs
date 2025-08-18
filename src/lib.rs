@@ -3900,8 +3900,8 @@ impl Build {
 
     // Gets the sysroot from cc by looking for the -sysroot flag. Used b/c the SYSROOT environment 
     // variable is not set when running using hermetic bazel.
-    fn sysroot_from_cc() -> Option<String> {
-        let cc: String = env::var("CC").ok()?;
+    fn sysroot_from_cc(&self) -> Option<String> {
+        let cc = self.getenv_unwrap_str("CC").ok()?;
         let out = Command::new(cc)
             .args(["-v", "-E", "-"])
             .stdin(std::process::Stdio::null())
@@ -3920,8 +3920,8 @@ impl Build {
 
     // First gets the sysroot from cc, then looks for the SDKSettings.json file in the sysroot and
     // returns the "Version" field.
-    fn deployment_target_from_cc() -> Option<String> {
-        if let Some(sysroot) = Self::sysroot_from_cc() {
+    fn deployment_target_from_cc(&self) -> Option<String> {
+        if let Some(sysroot) = self.sysroot_from_cc() {
             let sdk_settings_path = Path::new(&sysroot).join("SDKSettings.json");
             let sdk_settings = std::fs::read_to_string(sdk_settings_path).ok()?;
             let sdk_settings: serde_json::Value = serde_json::from_str(&sdk_settings).ok()?;
@@ -3935,7 +3935,7 @@ impl Build {
         // do not have xcrun available in the xcode toolchain (it's an OSX host library). So running
         // it will use non-hermetic xcode toolchain and fail on CI machines where it is not 
         // installed (and give incorrect paths even if it is installed).
-        if let Some(sysroot) = Self::sysroot_from_cc() {
+        if let Some(sysroot) = self.sysroot_from_cc() {
             return Ok(Arc::from(OsStr::new(&sysroot)));
         }
 
@@ -4026,11 +4026,13 @@ impl Build {
             return ret;
         }
 
-        // NOTE(paris): Use an environment variable here because when running using hermetic bazel 
-        // we do not have xcrun available in the xcode toolchain (it's an OSX host library). So we
-        // avoid calling it here by setting environment variables instead.
         let default_deployment_from_sdk = || -> Option<Arc<str>> {
-            if let Some(version) = Self::deployment_target_from_cc() {
+            // NOTE(paris): Fetch the deployment target directly from cc because when running using 
+            // hermetic bazel, we do not have xcrun available in the xcode toolchain (it's an OSX 
+            // host library). So running it will use non-hermetic xcode toolchain and fail on CI 
+            // machines where it is not installed (and give incorrect paths even if it is 
+            // installed).
+            if let Some(version) = self.deployment_target_from_cc() {
                 Some(Arc::from(version))
             } else {
                 let version = run_output(
