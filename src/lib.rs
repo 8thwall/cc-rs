@@ -3898,7 +3898,49 @@ impl Build {
         Ok(())
     }
 
+    // Gets the sysroot from cc by looking for the -sysroot flag. Used b/c the SYSROOT environment 
+    // variable is not set when running using hermetic bazel.
+    fn sysroot_from_cc() -> Option<String> {
+        let cc: String = env::var("CC").ok()?;
+        println!("cargo:warning=cc: [lib@apple_sdk_root_inner]: cc: {}", cc);
+        let out = Command::new(cc)
+            .args(["-v", "-E", "-"])
+            .stdin(std::process::Stdio::null())
+            .output().ok()?;
+        let s = std::str::from_utf8(&out.stderr).ok()?;
+        let mut it = s.split_whitespace();
+        while let Some(t) = it.next() {
+            if t == "-isysroot" {
+                if let Some(p) = it.next() {
+                    return Some(p.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    // First gets the sysroot from cc, then looks for the SDKSettings.json file in the sysroot and
+    // returns the "Version" field.
+    fn deployment_target_from_cc() -> Option<String> {
+        if let Some(sysroot) = Self::sysroot_from_cc() {
+            let sdk_settings_path = Path::new(&sysroot).join("SDKSettings.json");
+            let sdk_settings = std::fs::read_to_string(sdk_settings_path).ok()?;
+            let sdk_settings: serde_json::Value = serde_json::from_str(&sdk_settings).ok()?;
+            return Some(sdk_settings["Version"].to_string());
+        }
+        None
+    }
+
     fn apple_sdk_root_inner(&self, sdk: &str) -> Result<Arc<OsStr>, Error> {
+        // NOTE(paris): Fetch the SDK directly from cc because when running using hermetic bazel, we
+        // do not have xcrun available in the xcode toolchain (it's an OSX host library). So running
+        // it will use non-hermetic xcode toolchain and fail on CI machines where it is not 
+        // installed (and give incorrect paths even if it is installed).
+        if let Some(sysroot) = Self::sysroot_from_cc() {
+            println!("cargo:warning=cc: [lib@apple_sdk_root_inner]: Returning early with sysroot from CC: {}", &sysroot);
+            return Ok(Arc::from(OsStr::new(&sysroot)));
+        }
+
         // Code copied from rustc's compiler/rustc_codegen_ssa/src/back/link.rs.
         if let Some(sdkroot) = self.getenv("SDKROOT") {
             let p = Path::new(&sdkroot);
@@ -3986,17 +4028,26 @@ impl Build {
             return ret;
         }
 
+        // NOTE(paris): Use an environment variable here because when running using hermetic bazel 
+        // we do not have xcrun available in the xcode toolchain (it's an OSX host library). So we
+        // avoid calling it here by setting environment variables instead.
+        println!("cargo:warning=cc: [lib@apple_deployment_target]: sdk: {}", sdk);
         let default_deployment_from_sdk = || -> Option<Arc<str>> {
-            let version = run_output(
-                self.cmd("xcrun")
-                    .arg("--show-sdk-version")
-                    .arg("--sdk")
-                    .arg(sdk),
-                &self.cargo_output,
-            )
-            .ok()?;
-
-            Some(Arc::from(std::str::from_utf8(&version).ok()?.trim()))
+            if let Some(version) = Self::deployment_target_from_cc() {
+                println!("cargo:warning=cc: [lib@apple_deployment_target]: Using deplolyment target version from CC: {}", version);
+                return Some(Arc::from(version));
+            } else {
+                println!("cargo:warning=cc: [lib@apple_deployment_target]: no version found");
+                let version = run_output(
+                    self.cmd("xcrun")
+                        .arg("--show-sdk-version")
+                        .arg("--sdk")
+                        .arg(sdk),
+                    &self.cargo_output,
+                ).ok()?;
+        
+                Some(Arc::from(std::str::from_utf8(&version).ok()?.trim()))
+            }
         };
 
         let deployment_from_env = |name: &str| -> Option<Arc<str>> {
